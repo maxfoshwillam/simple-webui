@@ -2,6 +2,7 @@
 	"name": "open-webui",
 	"version": "0.6.5",
 	"private": true,
+	"license":"BSD-3-Clause",
 	"scripts": {
 		"dev": "npm run pyodide:fetch && vite dev --host",
 		"dev:5050": "npm run pyodide:fetch && vite dev --port 5050",

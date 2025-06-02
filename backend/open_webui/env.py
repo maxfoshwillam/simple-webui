@@ -6,10 +6,56 @@ import pkgutil
 import sys
 import shutil
 from pathlib import Path
+import typing
 
 import markdown
 from bs4 import BeautifulSoup
 from open_webui.constants import ERROR_MESSAGES
+
+
+def if_true(value:str | bool) -> bool:
+    if isinstance(value,bool):
+        return value
+    
+    if isinstance(value,str):
+        return value.lower() == "true"
+
+    return False
+
+@typing.overload
+def get_env(key:str, default: None) -> None: ...
+
+@typing.overload
+def get_env(key:str, default: str) -> str: ...
+
+@typing.overload
+def get_env(key:str, default: int) -> int: ...
+
+@typing.overload
+def get_env(key:str, default: bool) -> bool: ...
+
+def get_env(key:str, default: typing.Any) -> typing.Any:
+    value = os.environ.get(key,default)
+
+    if not value:
+        return default
+
+    if isinstance(default,bool):
+        return if_true(value)
+    
+    if isinstance(default, int):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+
+    if isinstance(default, float):
+        try:
+            return float(value)
+        except ValueError:
+            return default
+
+    return value
 
 ####################################
 # Load .env file
@@ -31,12 +77,12 @@ try:
 except ImportError:
     print("dotenv not installed, skipping...")
 
-DOCKER = os.environ.get("DOCKER", "False").lower() == "true"
+DOCKER = get_env("DOCKER")
 
 # device type embedding models - "cpu" (default), "cuda" (nvidia gpu required) or "mps" (apple silicon) - choosing this right can lead to better performance
-USE_CUDA = os.environ.get("USE_CUDA_DOCKER", "false")
+USE_CUDA = get_env("USE_CUDA_DOCKER")
 
-if USE_CUDA.lower() == "true":
+if USE_CUDA:
     try:
         import torch
 
@@ -65,7 +111,8 @@ except Exception:
 # LOGGING
 ####################################
 
-GLOBAL_LOG_LEVEL = os.environ.get("GLOBAL_LOG_LEVEL", "").upper()
+GLOBAL_LOG_LEVEL = get_env("GLOBAL_LOG_LEVEL", "").upper()
+
 if GLOBAL_LOG_LEVEL in logging.getLevelNamesMapping():
     logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL, force=True)
 else:
@@ -78,7 +125,7 @@ if "cuda_error" in locals():
     log.exception(cuda_error)
     del cuda_error
 
-log_sources = [
+log_sources = typing.Literal[
     "AUDIO",
     "COMFYUI",
     "CONFIG",
@@ -111,15 +158,15 @@ if WEBUI_NAME != "Open WebUI":
 
 WEBUI_FAVICON_URL = "https://openwebui.com/favicon.png"
 
-TRUSTED_SIGNATURE_KEY = os.environ.get("TRUSTED_SIGNATURE_KEY", "")
+TRUSTED_SIGNATURE_KEY = get_env("TRUSTED_SIGNATURE_KEY", "")
 
 ####################################
 # ENV (dev,test,prod)
 ####################################
 
-ENV = os.environ.get("ENV", "prod")
+ENV = get_env("ENV", "prod")
 
-FROM_INIT_PY = os.environ.get("FROM_INIT_PY", "False").lower() == "true"
+FROM_INIT_PY = get_env("FROM_INIT_PY")
 
 if FROM_INIT_PY:
     PACKAGE_DATA = {"version": importlib.metadata.version("open-webui")}
@@ -150,66 +197,27 @@ def parse_section(section):
         items.append({"title": title, "content": content, "raw": raw_html})
     return items
 
-
-try:
-    changelog_path = BASE_DIR / "CHANGELOG.md"
-    with open(str(changelog_path.absolute()), "r", encoding="utf8") as file:
-        changelog_content = file.read()
-
-except Exception:
-    changelog_content = (pkgutil.get_data("open_webui", "CHANGELOG.md") or b"").decode()
-
-# Convert markdown content to HTML
-html_content = markdown.markdown(changelog_content)
-
-# Parse the HTML content
-soup = BeautifulSoup(html_content, "html.parser")
-
-# Initialize JSON structure
-changelog_json = {}
-
-# Iterate over each version
-for version in soup.find_all("h2"):
-    version_number = version.get_text().strip().split(" - ")[0][1:-1]  # Remove brackets
-    date = version.get_text().strip().split(" - ")[1]
-
-    version_data = {"date": date}
-
-    # Find the next sibling that is a h3 tag (section title)
-    current = version.find_next_sibling()
-
-    while current and current.name != "h2":
-        if current.name == "h3":
-            section_title = current.get_text().lower()  # e.g., "added", "fixed"
-            section_items = parse_section(current.find_next_sibling("ul"))
-            version_data[section_title] = section_items
-
-        # Move to the next element
-        current = current.find_next_sibling()
-
-    changelog_json[version_number] = version_data
-
-CHANGELOG = changelog_json
+CHANGELOG = {"date":"mewo"}
 
 ####################################
 # SAFE_MODE
 ####################################
 
-SAFE_MODE = os.environ.get("SAFE_MODE", "false").lower() == "true"
+SAFE_MODE = get_env("SAFE_MODE", False)
 
 ####################################
 # ENABLE_FORWARD_USER_INFO_HEADERS
 ####################################
 
 ENABLE_FORWARD_USER_INFO_HEADERS = (
-    os.environ.get("ENABLE_FORWARD_USER_INFO_HEADERS", "False").lower() == "true"
+    get_env("ENABLE_FORWARD_USER_INFO_HEADERS")
 )
 
 ####################################
 # WEBUI_BUILD_HASH
 ####################################
 
-WEBUI_BUILD_HASH = os.environ.get("WEBUI_BUILD_HASH", "dev-build")
+WEBUI_BUILD_HASH = get_env("WEBUI_BUILD_HASH", "dev-build")
 
 ####################################
 # DATA/FRONTEND BUILD DIR
@@ -253,195 +261,109 @@ if FROM_INIT_PY:
 ####################################
 # Database
 ####################################
+DATABASE_URL = get_env("DATABASE_URL", f"sqlite:///{DATA_DIR}/webui.db")
 
-# Check if the file exists
-if os.path.exists(f"{DATA_DIR}/ollama.db"):
-    # Rename the file
-    os.rename(f"{DATA_DIR}/ollama.db", f"{DATA_DIR}/webui.db")
-    log.info("Database migrated from Ollama-WebUI successfully.")
-else:
-    pass
+DATABASE_SCHEMA = get_env("DATABASE_SCHEMA", None)
 
-DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{DATA_DIR}/webui.db")
+DATABASE_POOL_SIZE = get_env("DATABASE_POOL_SIZE", 0)
 
-# Replace the postgres:// with postgresql://
-if "postgres://" in DATABASE_URL:
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
+DATABASE_POOL_MAX_OVERFLOW = get_env("DATABASE_POOL_MAX_OVERFLOW", 0)
 
-DATABASE_SCHEMA = os.environ.get("DATABASE_SCHEMA", None)
+DATABASE_POOL_TIMEOUT = get_env("DATABASE_POOL_TIMEOUT", 30)
 
-DATABASE_POOL_SIZE = os.environ.get("DATABASE_POOL_SIZE", 0)
+DATABASE_POOL_RECYCLE = get_env("DATABASE_POOL_RECYCLE", 3600)
 
-if DATABASE_POOL_SIZE == "":
-    DATABASE_POOL_SIZE = 0
-else:
-    try:
-        DATABASE_POOL_SIZE = int(DATABASE_POOL_SIZE)
-    except Exception:
-        DATABASE_POOL_SIZE = 0
+RESET_CONFIG_ON_START = get_env("RESET_CONFIG_ON_START", False)
 
-DATABASE_POOL_MAX_OVERFLOW = os.environ.get("DATABASE_POOL_MAX_OVERFLOW", 0)
-
-if DATABASE_POOL_MAX_OVERFLOW == "":
-    DATABASE_POOL_MAX_OVERFLOW = 0
-else:
-    try:
-        DATABASE_POOL_MAX_OVERFLOW = int(DATABASE_POOL_MAX_OVERFLOW)
-    except Exception:
-        DATABASE_POOL_MAX_OVERFLOW = 0
-
-DATABASE_POOL_TIMEOUT = os.environ.get("DATABASE_POOL_TIMEOUT", 30)
-
-if DATABASE_POOL_TIMEOUT == "":
-    DATABASE_POOL_TIMEOUT = 30
-else:
-    try:
-        DATABASE_POOL_TIMEOUT = int(DATABASE_POOL_TIMEOUT)
-    except Exception:
-        DATABASE_POOL_TIMEOUT = 30
-
-DATABASE_POOL_RECYCLE = os.environ.get("DATABASE_POOL_RECYCLE", 3600)
-
-if DATABASE_POOL_RECYCLE == "":
-    DATABASE_POOL_RECYCLE = 3600
-else:
-    try:
-        DATABASE_POOL_RECYCLE = int(DATABASE_POOL_RECYCLE)
-    except Exception:
-        DATABASE_POOL_RECYCLE = 3600
-
-RESET_CONFIG_ON_START = (
-    os.environ.get("RESET_CONFIG_ON_START", "False").lower() == "true"
-)
-
-ENABLE_REALTIME_CHAT_SAVE = (
-    os.environ.get("ENABLE_REALTIME_CHAT_SAVE", "False").lower() == "true"
+ENABLE_REALTIME_CHAT_SAVE = get_env("ENABLE_REALTIME_CHAT_SAVE", False)
 )
 
 ####################################
 # REDIS
 ####################################
 
-REDIS_URL = os.environ.get("REDIS_URL", "")
-REDIS_SENTINEL_HOSTS = os.environ.get("REDIS_SENTINEL_HOSTS", "")
-REDIS_SENTINEL_PORT = os.environ.get("REDIS_SENTINEL_PORT", "26379")
+REDIS_URL = get_env("REDIS_URL", "")
+REDIS_SENTINEL_HOSTS = get_env("REDIS_SENTINEL_HOSTS", "")
+REDIS_SENTINEL_PORT = get_env("REDIS_SENTINEL_PORT", "26379")
 
 ####################################
 # UVICORN WORKERS
 ####################################
 
 # Number of uvicorn worker processes for handling requests
-UVICORN_WORKERS = os.environ.get("UVICORN_WORKERS", "1")
+UVICORN_WORKERS = get_env("UVICORN_WORKERS", 1)
+
 try:
-    UVICORN_WORKERS = int(UVICORN_WORKERS)
     if UVICORN_WORKERS < 1:
         UVICORN_WORKERS = 1
 except ValueError:
     UVICORN_WORKERS = 1
-    log.info(f"Invalid UVICORN_WORKERS value, defaulting to {UVICORN_WORKERS}")
+    log.warn(f"Invalid UVICORN_WORKERS value, defaulting to {UVICORN_WORKERS}")
 
 ####################################
 # WEBUI_AUTH (Required for security)
 ####################################
 
-WEBUI_AUTH = os.environ.get("WEBUI_AUTH", "True").lower() == "true"
-WEBUI_AUTH_TRUSTED_EMAIL_HEADER = os.environ.get(
+WEBUI_AUTH = get_env("WEBUI_AUTH", True)
+WEBUI_AUTH_TRUSTED_EMAIL_HEADER = get_env(
     "WEBUI_AUTH_TRUSTED_EMAIL_HEADER", None
 )
-WEBUI_AUTH_TRUSTED_NAME_HEADER = os.environ.get("WEBUI_AUTH_TRUSTED_NAME_HEADER", None)
+WEBUI_AUTH_TRUSTED_NAME_HEADER =get_env("WEBUI_AUTH_TRUSTED_NAME_HEADER", None)
 
-BYPASS_MODEL_ACCESS_CONTROL = (
-    os.environ.get("BYPASS_MODEL_ACCESS_CONTROL", "False").lower() == "true"
-)
+BYPASS_MODEL_ACCESS_CONTROL = get_env("BYPASS_MODEL_ACCESS_CONTROL", "False").lower() == "true"
+
 
 ####################################
 # WEBUI_SECRET_KEY
 ####################################
 
-WEBUI_SECRET_KEY = os.environ.get(
-    "WEBUI_SECRET_KEY",
-    os.environ.get(
-        "WEBUI_JWT_SECRET_KEY", "t0p-s3cr3t"
-    ),  # DEPRECATED: remove at next major version
-)
+WEBUI_SECRET_KEY = get_env("WEBUI_SECRET_KEY", "HELLO_WORLD")
 
-WEBUI_SESSION_COOKIE_SAME_SITE = os.environ.get("WEBUI_SESSION_COOKIE_SAME_SITE", "lax")
+WEBUI_SESSION_COOKIE_SAME_SITE = get_env("WEBUI_SESSION_COOKIE_SAME_SITE", "lax")
 
-WEBUI_SESSION_COOKIE_SECURE = (
-    os.environ.get("WEBUI_SESSION_COOKIE_SECURE", "false").lower() == "true"
-)
+WEBUI_SESSION_COOKIE_SECURE = get_env("WEBUI_SESSION_COOKIE_SECURE", False)
 
-WEBUI_AUTH_COOKIE_SAME_SITE = os.environ.get(
+
+WEBUI_AUTH_COOKIE_SAME_SITE = get_env(
     "WEBUI_AUTH_COOKIE_SAME_SITE", WEBUI_SESSION_COOKIE_SAME_SITE
 )
 
-WEBUI_AUTH_COOKIE_SECURE = (
-    os.environ.get(
-        "WEBUI_AUTH_COOKIE_SECURE",
-        os.environ.get("WEBUI_SESSION_COOKIE_SECURE", "false"),
-    ).lower()
-    == "true"
-)
+WEBUI_AUTH_COOKIE_SECURE = get_env("WEBUI_AUTH_COOKIE_SECURE", False)
 
-if WEBUI_AUTH and WEBUI_SECRET_KEY == "":
-    raise ValueError(ERROR_MESSAGES.ENV_VAR_NOT_FOUND)
+ENABLE_WEBSOCKET_SUPPORT = get_env("ENABLE_WEBSOCKET_SUPPORT", True)
+ 
+WEBSOCKET_MANAGER = get_env("WEBSOCKET_MANAGER", "")
 
-ENABLE_WEBSOCKET_SUPPORT = (
-    os.environ.get("ENABLE_WEBSOCKET_SUPPORT", "True").lower() == "true"
-)
+WEBSOCKET_REDIS_URL = get_env("WEBSOCKET_REDIS_URL", REDIS_URL)
+WEBSOCKET_REDIS_LOCK_TIMEOUT = get_env("WEBSOCKET_REDIS_LOCK_TIMEOUT", 60)
 
-WEBSOCKET_MANAGER = os.environ.get("WEBSOCKET_MANAGER", "")
+WEBSOCKET_SENTINEL_HOSTS = get_env("WEBSOCKET_SENTINEL_HOSTS", "")
 
-WEBSOCKET_REDIS_URL = os.environ.get("WEBSOCKET_REDIS_URL", REDIS_URL)
-WEBSOCKET_REDIS_LOCK_TIMEOUT = os.environ.get("WEBSOCKET_REDIS_LOCK_TIMEOUT", 60)
+WEBSOCKET_SENTINEL_PORT = get_env("WEBSOCKET_SENTINEL_PORT", "26379")
 
-WEBSOCKET_SENTINEL_HOSTS = os.environ.get("WEBSOCKET_SENTINEL_HOSTS", "")
+AIOHTTP_CLIENT_TIMEOUT = get_env("AIOHTTP_CLIENT_TIMEOUT", None)
 
-WEBSOCKET_SENTINEL_PORT = os.environ.get("WEBSOCKET_SENTINEL_PORT", "26379")
-
-AIOHTTP_CLIENT_TIMEOUT = os.environ.get("AIOHTTP_CLIENT_TIMEOUT", "")
-
-if AIOHTTP_CLIENT_TIMEOUT == "":
-    AIOHTTP_CLIENT_TIMEOUT = None
-else:
+if AIOHTTP_CLIENT_TIMEOUT:
     try:
         AIOHTTP_CLIENT_TIMEOUT = int(AIOHTTP_CLIENT_TIMEOUT)
     except Exception:
         AIOHTTP_CLIENT_TIMEOUT = 300
 
-AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST = os.environ.get(
+AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST = get_env(
     "AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST",
-    os.environ.get("AIOHTTP_CLIENT_TIMEOUT_OPENAI_MODEL_LIST", "10"),
+   10
 )
-
-if AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST == "":
-    AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST = None
-else:
-    try:
-        AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST = int(AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST)
-    except Exception:
-        AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST = 10
 
 
 AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA = os.environ.get(
-    "AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA", "10"
+    "AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA", 10
 )
-
-if AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA == "":
-    AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA = None
-else:
-    try:
-        AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA = int(
-            AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA
-        )
-    except Exception:
-        AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA = 10
 
 ####################################
 # OFFLINE_MODE
 ####################################
 
-OFFLINE_MODE = os.environ.get("OFFLINE_MODE", "false").lower() == "true"
+OFFLINE_MODE = get_env("OFFLINE_MODE", False)
 
 if OFFLINE_MODE:
     os.environ["HF_HUB_OFFLINE"] = "1"
@@ -471,15 +393,15 @@ AUDIT_EXCLUDED_PATHS = [path.lstrip("/") for path in AUDIT_EXCLUDED_PATHS]
 # OPENTELEMETRY
 ####################################
 
-ENABLE_OTEL = os.environ.get("ENABLE_OTEL", "False").lower() == "true"
-OTEL_EXPORTER_OTLP_ENDPOINT = os.environ.get(
+ENABLE_OTEL = get_env("ENABLE_OTEL", False)
+OTEL_EXPORTER_OTLP_ENDPOINT = get_env(
     "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317"
 )
-OTEL_SERVICE_NAME = os.environ.get("OTEL_SERVICE_NAME", "open-webui")
-OTEL_RESOURCE_ATTRIBUTES = os.environ.get(
+OTEL_SERVICE_NAME = get_env("OTEL_SERVICE_NAME", "open-webui")
+OTEL_RESOURCE_ATTRIBUTES = get_env(
     "OTEL_RESOURCE_ATTRIBUTES", ""
 )  # e.g. key1=val1,key2=val2
-OTEL_TRACES_SAMPLER = os.environ.get(
+OTEL_TRACES_SAMPLER = get_env(
     "OTEL_TRACES_SAMPLER", "parentbased_always_on"
 ).lower()
 
