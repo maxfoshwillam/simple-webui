@@ -2,15 +2,10 @@ import importlib.metadata
 import json
 import logging
 import os
-import pkgutil
 import sys
 import shutil
 from pathlib import Path
 import typing
-
-import markdown
-from bs4 import BeautifulSoup
-from open_webui.constants import ERROR_MESSAGES
 
 
 def if_true(value:str | bool) -> bool:
@@ -276,7 +271,7 @@ DATABASE_POOL_RECYCLE = get_env("DATABASE_POOL_RECYCLE", 3600)
 RESET_CONFIG_ON_START = get_env("RESET_CONFIG_ON_START", False)
 
 ENABLE_REALTIME_CHAT_SAVE = get_env("ENABLE_REALTIME_CHAT_SAVE", False)
-)
+
 
 ####################################
 # REDIS
