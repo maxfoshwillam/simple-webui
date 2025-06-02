@@ -1,21 +1,16 @@
 import asyncio
-import inspect
 import json
 import logging
 import mimetypes
 import os
-import shutil
 import sys
 import time
-import random
 
 from contextlib import asynccontextmanager
 from urllib.parse import urlencode, parse_qs, urlparse
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from typing import Optional
-from aiocache import cached
 import aiohttp
 import requests
 
@@ -23,14 +18,10 @@ import requests
 from fastapi import (
     Depends,
     FastAPI,
-    File,
-    Form,
     HTTPException,
     Request,
-    UploadFile,
     status,
     applications,
-    BackgroundTasks,
 )
 
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -42,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.responses import Response, StreamingResponse
+from starlette.responses import Response
 
 
 from open_webui.utils import logger
@@ -88,7 +79,7 @@ from open_webui.internal.db import Session, engine
 
 from open_webui.models.functions import Functions
 from open_webui.models.models import Models
-from open_webui.models.users import UserModel, Users
+from open_webui.models.users import Users
 from open_webui.models.chats import Chats
 
 from open_webui.config import (
@@ -167,19 +158,13 @@ from open_webui.config import (
     WHISPER_MODEL,
     WHISPER_VAD_FILTER,
     DEEPGRAM_API_KEY,
-    WHISPER_MODEL_AUTO_UPDATE,
-    WHISPER_MODEL_DIR,
-    # Retrieval
     RAG_TEMPLATE,
-    DEFAULT_RAG_TEMPLATE,
     RAG_FULL_CONTEXT,
     BYPASS_EMBEDDING_AND_RETRIEVAL,
     RAG_EMBEDDING_MODEL,
     RAG_EMBEDDING_MODEL_AUTO_UPDATE,
-    RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE,
     RAG_RERANKING_MODEL,
     RAG_RERANKING_MODEL_AUTO_UPDATE,
-    RAG_RERANKING_MODEL_TRUST_REMOTE_CODE,
     RAG_EMBEDDING_ENGINE,
     RAG_EMBEDDING_BATCH_SIZE,
     RAG_RELEVANCE_THRESHOLD,
@@ -238,14 +223,10 @@ from open_webui.config import (
     GOOGLE_PSE_ENGINE_ID,
     GOOGLE_DRIVE_CLIENT_ID,
     GOOGLE_DRIVE_API_KEY,
-    ONEDRIVE_CLIENT_ID,
     ENABLE_RAG_HYBRID_SEARCH,
-    ENABLE_RAG_LOCAL_WEB_FETCH,
     ENABLE_WEB_LOADER_SSL_VERIFICATION,
     ENABLE_GOOGLE_DRIVE_INTEGRATION,
     ENABLE_ONEDRIVE_INTEGRATION,
-    UPLOAD_DIR,
-    # WebUI
     WEBUI_AUTH,
     WEBUI_NAME,
     WEBUI_BANNERS,
@@ -267,7 +248,6 @@ from open_webui.config import (
     DEFAULT_USER_ROLE,
     DEFAULT_PROMPT_SUGGESTIONS,
     DEFAULT_MODELS,
-    DEFAULT_ARENA_MODEL,
     MODEL_ORDER_LIST,
     EVALUATION_ARENA_MODELS,
     # WebUI (OAuth)
@@ -363,7 +343,6 @@ from open_webui.utils.middleware import process_chat_payload, process_chat_respo
 from open_webui.utils.access_control import has_access
 
 from open_webui.utils.auth import (
-    get_license_data,
     get_http_authorization_cred,
     decode_token,
     get_admin_user,
@@ -1368,7 +1347,7 @@ async def get_app_version():
 async def get_app_latest_release_version(user=Depends(get_verified_user)):
     if OFFLINE_MODE:
         log.debug(
-            f"Offline mode is enabled, returning current version as latest version"
+            "Offline mode is enabled, returning current version as latest version"
         )
         return {"current": VERSION, "latest": VERSION}
     try:

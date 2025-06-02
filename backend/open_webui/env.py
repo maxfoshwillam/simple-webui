@@ -10,7 +10,7 @@ import typing
 
 def if_true(value:str | bool) -> bool:
     if isinstance(value,bool):
-        return value
+        return value is True
     
     if isinstance(value,str):
         return value.lower() == "true"
