@@ -1,6 +1,6 @@
 {
-	"name": "open-webui",
-	"version": "0.6.5",
+	"name": "simple-webui",
+	"version": "0.1.4",
 	"private": true,
 	"license":"BSD-3-Clause",
 	"scripts": {

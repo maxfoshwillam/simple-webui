@@ -4,14 +4,12 @@ import jwt
 import base64
 import hmac
 import hashlib
-import requests
 import os
 
 
 from datetime import datetime, timedelta
-import pytz
 from pytz import UTC
-from typing import Optional, Union, List, Dict
+from typing import Optional, Union
 
 from open_webui.models.users import Users
 
@@ -23,7 +21,7 @@ from open_webui.env import (
     SRC_LOG_LEVELS,
 )
 
-from fastapi import BackgroundTasks, Depends, HTTPException, Request, Response, status
+from fastapi import BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 
